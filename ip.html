@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Diagnostics</title>
+<style>
+  body { background: #0f172a; color: #e2e8f0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; padding: 30px 20px; line-height: 1.6; }
+  .container { max-width: 800px; margin: 0 auto; }
+  h1 { color: #38bdf8; font-size: 1.4rem; border-bottom: 1px solid #1e293b; padding-bottom: 12px; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .box { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 18px; }
+  .label { color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .val { color: #f8fafc; font-size: 1.15rem; font-weight: bold; margin-top: 4px; word-break: break-all; }
+  .ok { color: #4ade80; }
+  .dns-box { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 18px; }
+  input, select, button { background: #0f172a; color: #f8fafc; border: 1px solid #475569; padding: 8px 12px; border-radius: 4px; font-family: inherit; }
+  button { background: #0284c7; border-color: #0284c7; cursor: pointer; font-weight: bold; }
+  button:hover { background: #0369a1; }
+  pre { background: #0f172a; padding: 12px; border-radius: 6px; margin-top: 12px; overflow-x: auto; font-size: 0.85rem; color: #cbd5e1; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>&gt;_ SYSTEM &amp; NETWORK DIAGNOSTICS</h1>
+  <div class="grid">
+    <div class="box"><div class="label">Public IP Address</div><div class="val" id="ip">Loading...</div></div>
+    <div class="box"><div class="label">ISP / Organization</div><div class="val" id="isp">Loading...</div></div>
+    <div class="box"><div class="label">Location / Timezone</div><div class="val" id="loc">Loading...</div></div>
+    <div class="box"><div class="label">Cloudflare Edge Latency</div><div class="val ok" id="ping">Testing...</div></div>
+  </div>
+  <div class="box" style="margin-bottom: 24px;">
+    <div class="label">Browser Environment</div>
+    <div class="val" style="font-size: 0.9rem; font-weight: normal;" id="ua"></div>
+  </div>
+  <div class="dns-box">
+    <div class="label" style="margin-bottom: 10px;">Quick DNS-over-HTTPS Lookup</div>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+      <input type="text" id="domain" placeholder="example.com" style="flex: 1; min-width: 180px;">
+      <select id="rtype"><option value="A">A</option><option value="MX">MX</option><option value="TXT">TXT</option><option value="CNAME">CNAME</option></select>
+      <button onclick="checkDNS()">Query</button>
+    </div>
+    <pre id="dns-out">Enter a domain and click Query...</pre>
+  </div>
+</div>
+<script>
+  document.getElementById('ua').textContent = navigator.userAgent + ' | Screen: ' + screen.width + 'x' + screen.height;
+
+  fetch('https://ipapi.co')
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('ip').textContent = d.ip || 'N/A';
+      document.getElementById('isp').textContent = d.org || 'N/A';
+      document.getElementById('loc').textContent = (d.city || '') + ', ' + (d.country_name || '') + ' (' + (d.timezone || '') + ')';
+    })
+    .catch(() => { document.getElementById('ip').textContent = 'Blocked by AdBlock/Privacy'; });
+
+  const t0 = performance.now();
+  fetch('https://1.1.1', { mode: 'no-cors' })
+    .then(() => { document.getElementById('ping').textContent = Math.round(performance.now() - t0) + ' ms'; })
+    .catch(() => { document.getElementById('ping').textContent = 'Timeout'; });
+
+  function checkDNS() {
+    const dom = document.getElementById('domain').value.trim();
+    const type = document.getElementById('rtype').value;
+    const out = document.getElementById('dns-out');
+    if (!dom) return;
+    out.textContent = 'Querying Cloudflare DoH...';
+    fetch('https://cloudflare-dns.com' + encodeURIComponent(dom) + '&type=' + type, {
+      headers: { 'Accept': 'application/dns-json' }
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.Answer) { out.textContent = 'No records found.'; return; }
+      out.textContent = data.Answer.map(a => a.name + '  ' + a.TTL + 's  ' + type + '  ' + a.data).join('\n');
+    })
+    .catch(e => { out.textContent = 'Error: ' + e.message; });
+  }
+</script>
+</body>
+</html>
