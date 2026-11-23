@@ -26,8 +26,8 @@
   <div class="grid">
     <div class="box"><div class="label">Public IP Address</div><div class="val" id="ip">Checking...</div></div>
     <div class="box"><div class="label">ISP / ASN Organization</div><div class="val" id="isp">Checking...</div></div>
-    <div class="box"><div class="label">Location / Edge Node</div><div class="val" id="loc">Checking...</div></div>
-    <div class="box"><div class="label">Cloudflare Edge Latency</div><div class="val ok" id="ping">Testing...</div></div>
+    <div class="box"><div class="label">Location / Timezone</div><div class="val" id="loc">Checking...</div></div>
+    <div class="box"><div class="label">Cloudflare DNS Latency</div><div class="val ok" id="ping">Testing...</div></div>
   </div>
   <div class="box" style="margin-bottom: 24px;">
     <div class="label">Browser Environment</div>
@@ -47,30 +47,32 @@
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   document.getElementById('ua').textContent = navigator.userAgent + ' | Screen: ' + screen.width + 'x' + screen.height + ' | TZ: ' + tz;
 
+  // 1. Latency test via Cloudflare DoH (CORS supported)
   const t0 = performance.now();
-  fetch('https://cloudflare.com')
-    .then(r => r.text())
-    .then(txt => {
-      const ms = Math.round(performance.now() - t0);
-      document.getElementById('ping').textContent = ms + ' ms';
-      const lines = Object.fromEntries(txt.trim().split('\n').map(l => l.split('=')));
-      if (lines.ip) document.getElementById('ip').textContent = lines.ip;
-      document.getElementById('loc').textContent = (lines.loc || 'N/A') + ' (CF Node: ' + (lines.colo || 'N/A') + ')';
-      return fetch('https://ipwho.is' + lines.ip);
-    })
+  fetch('https://cloudflare-dns.com', { headers: { 'Accept': 'application/dns-json' } })
+    .then(() => { document.getElementById('ping').textContent = Math.round(performance.now() - t0) + ' ms'; })
+    .catch(() => { document.getElementById('ping').textContent = 'Blocked'; });
+
+  // 2. IP & Geo via GeoJS (CORS supported, privacy-friendly) with ipify fallback
+  fetch('https://geojs.io')
     .then(r => r.json())
     .then(d => {
-      if (d && d.connection) {
-        document.getElementById('isp').textContent = d.connection.isp + ' (AS' + d.connection.asn + ')';
-        if (d.city) document.getElementById('loc').textContent = d.city + ', ' + d.country_code + ' (CF: ' + document.getElementById('loc').textContent.split('CF Node: ')[1];
-      }
+      document.getElementById('ip').textContent = d.ip || 'N/A';
+      document.getElementById('isp').textContent = (d.organization_name || 'N/A') + (d.asn ? ' (AS' + d.asn + ')' : '');
+      document.getElementById('loc').textContent = [d.city, d.country].filter(Boolean).join(', ') + ' (' + tz + ')';
     })
     .catch(() => {
-      if (document.getElementById('isp').textContent === 'Checking...') {
-        document.getElementById('isp').textContent = 'Protected (CF Trace OK)';
-      }
+      fetch('https://ipify.org')
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('ip').textContent = d.ip;
+          document.getElementById('isp').textContent = 'Geo API filtered by browser';
+          document.getElementById('loc').textContent = tz;
+        })
+        .catch(() => { document.getElementById('ip').textContent = 'Blocked by network/browser'; });
     });
 
+  // 3. DNS Lookup
   function checkDNS() {
     const dom = document.getElementById('domain').value.trim();
     const type = document.getElementById('rtype').value;
