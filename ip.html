@@ -47,14 +47,18 @@
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   document.getElementById('ua').textContent = navigator.userAgent + ' | Screen: ' + screen.width + 'x' + screen.height + ' | TZ: ' + tz;
 
-  // 1. Latency test via Cloudflare DoH (CORS supported)
+  const cfBase = 'https://' + 'cloudflare-dns.com' + '/dns-query';
+  const geoUrl = 'https://' + 'get.geojs.io' + '/v1/ip/geo.json';
+  const ipifyUrl = 'https://' + 'api64.ipify.org' + '?format=json';
+
+  // 1. Latency test
   const t0 = performance.now();
-  fetch('https://cloudflare-dns.com', { headers: { 'Accept': 'application/dns-json' } })
+  fetch(cfBase + '?name=example.com&type=A', { headers: { 'Accept': 'application/dns-json' } })
     .then(() => { document.getElementById('ping').textContent = Math.round(performance.now() - t0) + ' ms'; })
     .catch(() => { document.getElementById('ping').textContent = 'Blocked'; });
 
-  // 2. IP & Geo via GeoJS (CORS supported, privacy-friendly) with ipify fallback
-  fetch('https://geojs.io')
+  // 2. IP & Geo
+  fetch(geoUrl)
     .then(r => r.json())
     .then(d => {
       document.getElementById('ip').textContent = d.ip || 'N/A';
@@ -62,14 +66,14 @@
       document.getElementById('loc').textContent = [d.city, d.country].filter(Boolean).join(', ') + ' (' + tz + ')';
     })
     .catch(() => {
-      fetch('https://ipify.org')
+      fetch(ipifyUrl)
         .then(r => r.json())
         .then(d => {
           document.getElementById('ip').textContent = d.ip;
-          document.getElementById('isp').textContent = 'Geo API filtered by browser';
+          document.getElementById('isp').textContent = 'Geo API filtered';
           document.getElementById('loc').textContent = tz;
         })
-        .catch(() => { document.getElementById('ip').textContent = 'Blocked by network/browser'; });
+        .catch(() => { document.getElementById('ip').textContent = 'Blocked'; });
     });
 
   // 3. DNS Lookup
@@ -79,7 +83,7 @@
     const out = document.getElementById('dns-out');
     if (!dom) return;
     out.textContent = 'Querying Cloudflare DoH...';
-    fetch('https://cloudflare-dns.com' + encodeURIComponent(dom) + '&type=' + type, {
+    fetch(cfBase + '?name=' + encodeURIComponent(dom) + '&type=' + type, {
       headers: { 'Accept': 'application/dns-json' }
     })
     .then(r => r.json())
