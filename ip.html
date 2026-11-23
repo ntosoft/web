@@ -24,9 +24,9 @@
 <div class="container">
   <h1>&gt;_ SYSTEM &amp; NETWORK DIAGNOSTICS</h1>
   <div class="grid">
-    <div class="box"><div class="label">Public IP Address</div><div class="val" id="ip">Loading...</div></div>
-    <div class="box"><div class="label">ISP / Organization</div><div class="val" id="isp">Loading...</div></div>
-    <div class="box"><div class="label">Location / Timezone</div><div class="val" id="loc">Loading...</div></div>
+    <div class="box"><div class="label">Public IP Address</div><div class="val" id="ip">Checking...</div></div>
+    <div class="box"><div class="label">ISP / ASN Organization</div><div class="val" id="isp">Checking...</div></div>
+    <div class="box"><div class="label">Location / Edge Node</div><div class="val" id="loc">Checking...</div></div>
     <div class="box"><div class="label">Cloudflare Edge Latency</div><div class="val ok" id="ping">Testing...</div></div>
   </div>
   <div class="box" style="margin-bottom: 24px;">
@@ -44,21 +44,32 @@
   </div>
 </div>
 <script>
-  document.getElementById('ua').textContent = navigator.userAgent + ' | Screen: ' + screen.width + 'x' + screen.height;
-
-  fetch('https://ipapi.co')
-    .then(r => r.json())
-    .then(d => {
-      document.getElementById('ip').textContent = d.ip || 'N/A';
-      document.getElementById('isp').textContent = d.org || 'N/A';
-      document.getElementById('loc').textContent = (d.city || '') + ', ' + (d.country_name || '') + ' (' + (d.timezone || '') + ')';
-    })
-    .catch(() => { document.getElementById('ip').textContent = 'Blocked by AdBlock/Privacy'; });
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  document.getElementById('ua').textContent = navigator.userAgent + ' | Screen: ' + screen.width + 'x' + screen.height + ' | TZ: ' + tz;
 
   const t0 = performance.now();
-  fetch('https://1.1.1', { mode: 'no-cors' })
-    .then(() => { document.getElementById('ping').textContent = Math.round(performance.now() - t0) + ' ms'; })
-    .catch(() => { document.getElementById('ping').textContent = 'Timeout'; });
+  fetch('https://cloudflare.com')
+    .then(r => r.text())
+    .then(txt => {
+      const ms = Math.round(performance.now() - t0);
+      document.getElementById('ping').textContent = ms + ' ms';
+      const lines = Object.fromEntries(txt.trim().split('\n').map(l => l.split('=')));
+      if (lines.ip) document.getElementById('ip').textContent = lines.ip;
+      document.getElementById('loc').textContent = (lines.loc || 'N/A') + ' (CF Node: ' + (lines.colo || 'N/A') + ')';
+      return fetch('https://ipwho.is' + lines.ip);
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d && d.connection) {
+        document.getElementById('isp').textContent = d.connection.isp + ' (AS' + d.connection.asn + ')';
+        if (d.city) document.getElementById('loc').textContent = d.city + ', ' + d.country_code + ' (CF: ' + document.getElementById('loc').textContent.split('CF Node: ')[1];
+      }
+    })
+    .catch(() => {
+      if (document.getElementById('isp').textContent === 'Checking...') {
+        document.getElementById('isp').textContent = 'Protected (CF Trace OK)';
+      }
+    });
 
   function checkDNS() {
     const dom = document.getElementById('domain').value.trim();
